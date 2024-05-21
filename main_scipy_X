@@ -1,0 +1,328 @@
+import numpy as np
+from scipy.io import mmread
+from scipy.sparse import csr_matrix
+import networkx as nx
+from utils import initialize_U, opt_solver #evaluate_q_A,
+from hlr import hlr
+from scipy.optimize import minimize
+#from gradient import gradient_descent
+
+# --------------------------------------------------------------
+# Defining SDP for Maximum stable set
+# Given a graph G = ([n], E)
+
+def import_graph_from_mtx(file_path):
+    # reading graph adjacency matrix from .mtx file
+    adjacency_matrix = mmread(file_path)
+    
+    # converting to NetworkX graph
+    #graph = nx.to_scipy_sparse_array(adjacency_matrix)
+    graph = nx.convert_matrix.from_scipy_sparse_array(adjacency_matrix)
+    # Get the node set [n] and edge set E
+    nodes = list(graph.nodes)
+    edges = list(graph.edges)
+    
+    return nodes, edges
+
+file_path = "graphs/small.mtx"
+nodes, edges = import_graph_from_mtx(file_path)
+
+def create_small_graph():
+    # Define nodes
+    nodes = [1, 2, 3, 4, 5]
+    # Define edges (as tuples of node pairs)
+    edges = [(1, 2), (2, 3), (3, 4), (4, 5), (5, 1)]
+    return nodes, edges
+
+nodes, edges = create_small_graph()
+# max {ee^T•X : X_ij=0, ij ∈ E, tr(X)=1, X ∈ S^n}
+
+n = len(nodes)
+m = len(edges)
+e = np.ones(n)
+C = - np.outer(e, e)
+b = np.zeros(m)
+
+def A(X):
+    AX = np.empty(m)
+    for k, (i, j) in enumerate(edges): 
+        # Assuming X is a sparse matrix representation of the adjacency matrix
+        # print(AX[k], X[nodes.index(i), nodes.index(j)])
+        # print("K", nodes.index(1), nodes.index(2), nodes.index(3), nodes.index(4), nodes.index(5))
+        AX[k] = X[nodes.index(i), nodes.index(j)]
+    return AX
+
+def A_adjoint(v):
+    """ CHECK """
+    M = np.zeros((n, n))
+    for k, (i, j) in enumerate(edges):
+        M[nodes.index(i), nodes.index(j)] = v[k]
+        M[nodes.index(j), nodes.index(i)] = v[k]
+    return M
+
+def q(Y, p, beta):
+    return p + beta * (A(Y.dot(Y.T)) - b)
+
+def theta_tilde(Y, p, beta):
+    # computing the minimum eigenvalue of C + A(q(Y; p))
+    min_eigenvalue = np.linalg.eigvalsh(C + A_adjoint(q(Y, p, beta))).min()
+    
+    return max(-min_eigenvalue, 0)
+
+def constraint_function(X_flat):
+    n = int(np.sqrt(len(X_flat)))
+    X = np.reshape(X_flat, (n, n))
+
+    # symmetric?
+
+    # Initialize constraints
+    #constraints = []
+
+    # Add trace constraint
+    # trace_constraint = np.trace(X) - 1
+    trace_constraint = np.trace(X) - 1
+    #constraints.append(trace_constraint)
+
+    # Check positive semidefiniteness
+    #eigenvalues = np.linalg.eigvalsh(X)
+    #for eigval in eigenvalues:
+    #    constraints.append(-eigval)
+
+    return trace_constraint
+
+def check_constraints(X_flat, epsilon=1e-6):
+    n = int(np.sqrt(len(X_flat)))
+    X = csr_matrix(X_flat.reshape((n, n)))
+    print("här", X.trace())
+    # Trace constraint
+    trace_constraint = np.isclose(X.trace(), 1, atol=epsilon)   
+    print("här", X.trace(), trace_constraint)
+
+    # Eigenvalue constraint
+    eigenvalues = np.linalg.eigvalsh(X.toarray())
+    eigenvalue_constraint = all(eigval >= -epsilon for eigval in eigenvalues)
+
+    return trace_constraint, eigenvalue_constraint
+
+"""
+def redefine_C(X):
+    # Get the shape of the sparse matrix X
+    n, _ = X.shape
+    e = csr_matrix(np.ones(n))
+    # Initialize C as a sparse matrix with the same shape as X
+    C = -e.dot(e.T)
+    
+    # Set non-zero values in C based on the edges
+    #for i, j in edges:
+    #    C[i, j] = -1
+    #    C[j, i] = -1  # Assuming an undirected graph
+    
+    return C
+"""
+
+def calculate_U(X, s):
+    # calculating U ∈ (n x s) where UUT a s-rank approximation of X
+    # Perform eigen decomposition on X
+    eigvals, eigvecs = np.linalg.eigh(X)
+    
+    # Take the square root of the largest s eigenvalues
+    largest_eigvals = eigvals[-s:]
+    U = np.sqrt(largest_eigvals) * eigvecs[:, -s:]
+    
+    return U
+
+def initialize_X(n):
+    # Generate a random symmetric matrix
+    X = np.random.randn(n, n)
+    X = (X + X.T) / 2  # Ensure symmetry
+
+    # Make it positive semidefinite by adding a small multiple of the identity matrix
+    eps = 1e-6
+    X += eps * np.eye(n)
+
+    # Normalize the matrix to ensure trace = 1
+    trace_X = np.trace(X)
+    X /= trace_X
+
+    return X
+# --------------------------------------------------------------
+
+def hallar(X_0, p_0, epsilon_c, epsilon_p, beta, rho, lambda_0):
+    
+    # defining initial iterates
+    t = 1
+    X_t = X_0
+    p_t = p_0
+
+    # threshold
+    epsilon = min(epsilon_c, epsilon_p**2 * beta / 6)
+
+    # solving U_t iteratively until stopping criterion is met (maximum residual)
+    while True:
+        # defining lagrangian for p_t
+        def L_beta(X):
+            return np.trace(C.dot(X)) + np.dot(p_t.T, A(X) - b) + beta/2 * np.linalg.norm(A(X) - b) ** 2
+            # OR
+            # return np.trace(C.dot(X)) + np.dot(p_t.T, AX_minus_b) + beta/2 * np.linalg.norm(AX_minus_b) ** 2
+            # How define when maximization problem?
+
+        def L_beta_scipy(X_flat):
+            # print(YY_flat.shape, len(YY_flat), YY_flat)
+            n = int(np.sqrt(len(X_flat)))
+            # X = YY_flat.reshape((n, n))
+            X = csr_matrix(X_flat.reshape((n, n)))
+            C_sparse = csr_matrix(C)
+
+            return C_sparse.dot(X).trace() + np.dot(p_t.T, A(X) - b) + beta/2 * np.linalg.norm(A(X) - b) ** 2
+        def L_beta_scipy_check(X_flat):
+            # print(YY_flat.shape, len(YY_flat), YY_flat)
+            n = int(np.sqrt(len(X_flat)))
+            # X = YY_flat.reshape((n, n))
+            X = csr_matrix(X_flat.reshape((n, n)))
+            C_sparse = csr_matrix(C)
+            #print(C_sparse.dot(X).trace(), np.dot(p_t.T, A(X) - b), beta/2 * np.linalg.norm(A(X) - b) ** 2)
+            #print("C_sparse", C_sparse, "X", X)
+
+            return C_sparse.dot(X).trace() + np.dot(p_t.T, A(X) - b) + beta/2 * np.linalg.norm(A(X) - b) ** 2
+
+        
+        """
+        def constraints(X):
+            # ensuring X is positive semidefinite and has unit trace?
+            trace_constraint = np.trace(X) - 1
+            psd_constraint = -X  # X should be negative semidefinite
+            return trace_constraint, psd_constraint
+
+        def L_beta_with_constraints(X):
+            obj_term = L_beta(X)
+            trace_constraint, psd_constraint = constraints(X)
+            penalty_term = np.linalg.norm(trace_constraint) ** 2 + np.linalg.norm(psd_constraint) ** 2
+            return obj_term + penalty_term
+        """
+
+        # defining initial Y_0 by warm start
+        # X_0 = X_t
+
+        """ check constraints for X """
+        # trace_satisfied, eigenvalues_satisfied = check_constraints_U(Y_0)
+        # print("Trace constraint satisfied:", trace_satisfied)
+        # print("Eigenvalues constraint satisfied:", eigenvalues_satisfied)
+
+        # calling HLR with initial Y_0, giving next iterate U_t
+        
+        # U_t = hlr(Y_0, L_beta, lambda_0, epsilon, rho)
+        # value, U_t = opt_solver(L_beta_cp, Y_0)
+        
+        # ----------------- scipy optimize ------------------------------------
+        # optimizing in full rank to then create s-rank approximation of output
+        # Initial guess for YY^T
+        YY_initial_guess = X_t
+
+        # Flatten the initial guess for optimization
+        YY_initial_guess_flat = YY_initial_guess.flatten()
+        
+        # print(YY_initial_guess.shape, YY_initial_guess_flat.shape)
+
+        # Define the bounds for YY_flat (optional)
+        #bounds = [(-np.inf, np.inf)] * len(YY_initial_guess_flat)
+
+        # Define the constraints using dictionaries
+        constraints = {'type': 'ineq', 'fun': lambda x: constraint_function(x)}
+        cons = ({'type': 'ineq', 'fun': lambda x:  np.trace(x.reshape(int(np.sqrt(len(x))),int(np.sqrt(len(x)))))**2 - 1})
+    
+        con = lambda x: np.trace(x.reshape(int(np.sqrt(len(x))),int(np.sqrt(len(x)))))**2 - 1
+        from scipy.optimize import NonlinearConstraint
+        nlc = NonlinearConstraint(con, -np.inf, 0)
+        
+        con0 = lambda x: np.linalg.eigvalsh(x.reshape(int(np.sqrt(len(x))),int(np.sqrt(len(x)))))[0]
+        nlc0 = NonlinearConstraint(con0, 0, np.inf)
+        con1 = lambda x: np.linalg.eigvalsh(x.reshape(int(np.sqrt(len(x))),int(np.sqrt(len(x)))))[1]
+        nlc1 = NonlinearConstraint(con1, 0, np.inf)
+        con2 = lambda x: np.linalg.eigvalsh(x.reshape(int(np.sqrt(len(x))),int(np.sqrt(len(x)))))[2]
+        nlc2 = NonlinearConstraint(con2, 0, np.inf)
+        con3 = lambda x: np.linalg.eigvalsh(x.reshape(int(np.sqrt(len(x))),int(np.sqrt(len(x)))))[3]
+        nlc3 = NonlinearConstraint(con3, 0, np.inf)
+        con4 = lambda x: np.linalg.eigvalsh(x.reshape(int(np.sqrt(len(x))),int(np.sqrt(len(x)))))[4]
+        nlc4 = NonlinearConstraint(con4, 0, np.inf)
+
+        cons = (nlc, nlc0, nlc1, nlc2, nlc3, nlc4)
+
+        print(np.linalg.eigvalsh(X_t))
+        #n = int(np.sqrt(len(X_flat)))
+        #X = np.reshape(X_flat, (n, n))
+                #{'type': 'ineq', 'fun': lambda x: -x[0] - 2 * x[1] + 6},
+                #{'type': 'ineq', 'fun': lambda x: -x[0] + 2 * x[1] + 2})
+
+        # Optimize the objective function subject to the constraints
+        result = minimize(L_beta_scipy, YY_initial_guess_flat, constraints=cons) # , bounds=bounds
+
+        # Retrieve the optimal solution
+        optimal_solution_x_flat = result.x
+        optimal_solution_x = optimal_solution_x_flat.reshape(YY_initial_guess.shape)
+        print("trace of solution:", optimal_solution_x.trace())
+        #print("X")
+        #print(L_beta_scipy(YY_initial_guess_flat))
+        #print(L_beta_scipy(optimal_solution_x_flat))
+        #print("U")
+
+        
+        #print(U_t)
+        #print("UUT")
+        #print(U_t.dot(U_t.T))
+        #optimal_solution = csr_matrix(optimal_solution_flat.reshape(YY_initial_guess.shape))
+
+        # Evaluate constraints for the optimal solution YY
+        trace_constraint, eigenvalue_constraint = check_constraints(optimal_solution_x_flat)
+
+        # Check if constraints are satisfied
+        if trace_constraint <= 0 and eigenvalue_constraint:
+            print("Constraints are satisfied.")
+        else:
+            print("Constraints are not satisfied.")
+
+        """ CHECK """
+        """ Byt till allt i x-domän eller projicera UUT tillbaka på spektraplex """
+        # U_t = calculate_U(optimal_solution_x, Y_0.shape[1])
+        X_t = optimal_solution_x
+
+        # -----------------------------------------------------------------------
+
+        # U_t = gradient_descent(L_beta, Y_0, .1, p_t, beta)
+
+        # Updating Lagrangian multiplier with the violation of constraints (and penalty parameter beta)
+        """ CHECK """
+        p_t = p_t + beta * (A(X_t) - b)
+
+        # stopping condition ||A(UU.T)-b|| < epsilon_p
+        if np.linalg.norm(A(X_t) - b) < epsilon_p: # ord='fro' ?
+            break
+
+        # safety break
+        if t > 100:
+            break
+        
+        """ vilken L_beta? """
+        print("Iteration {}:".format(t), np.linalg.norm(A(X_t) - b), L_beta_scipy_check(optimal_solution_x_flat))#,
+              #C_sparse.dot(X_t).trace(),np.dot(p_t.T, A(X_t) - b), beta/2 * np.linalg.norm(A(X_t) - b) ** 2)
+
+        t = t + 1
+
+    # Minimal eigenvalue computation
+    theta_t = theta_tilde(X_t, p_t, beta)
+
+    return X_t, p_t, theta_t
+
+
+X, p_t, theta_t = hallar(
+    # initial points
+        X_0         = initialize_X(n),
+        p_0         = np.zeros(m),
+    # tolerance pair
+        epsilon_c   = .05,
+        epsilon_p   = .05, 
+    # penalty parameter
+        beta        = .2, 
+    # ADAP-AIPP parameters
+        rho         = 1,
+        lambda_0    = 1
+    )
