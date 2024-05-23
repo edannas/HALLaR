@@ -1,6 +1,6 @@
 import numpy as np
 
-from main_hlr import A_adjoint, q
+from main import A_adjoint, q
 
 def gradient_descent(L_beta, Y_0, epsilon, p, C, learning_rate=1e-3, max_iterations=1000):
     Y_k = Y_0

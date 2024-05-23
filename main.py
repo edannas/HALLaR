@@ -1,17 +1,34 @@
 """ 
+min {C•UUT : A(UUT)=b, ||U||≤1, U ∈ R^{n×r}}
+
 TODO
+- clean HLR
+- clean compute_gradient (move to utils?)
+- check A adjoint function
+- check utils: initialize_X, calculate_Y
+
+- Hur formulera trace constraint? Kvadrat istället för abs. Olikhet ist. för likhet?
+- apply timing function to check total time but also to identify areas for optimization
 - plot convergence curve
 - check minimal eigenvalue computation theta_tilde, why?
 - selection of parameters?
 - check which solver is used in scipy.optimize.minimze
 - pass derivatives to optimizer
+- Store all iterations and plot Y-vector and objective function (lagrangian)
+- LANCElOT method for selecting adaptive beta?
+- Check if approx optimal for the SDP, using duality gap? (also, compare to nx function (approximate))
+  Plot fluctuations in nx function to highlight not an exact number. Boxplot between this and HALLaR for a few runs.
+  (On a really small graph check with known MSS)
+- We dont necesarrily need THE optimal solution because of relaxation, but if almost it would be good 
+- Compute gradient using adjoint instead of finite difference, but check correctness with FD
+- 15-20 pages for report
 """
 
 # ----------------- IMPORTS AND SETUP -----------------
 import numpy as np
 from utils import *
-# from hlr import hlr
 from scipy.optimize import minimize, NonlinearConstraint
+# from HLR import hlr
 # import cvxpy as cp
 
 # -- Import problem definition for maximum stable set --
@@ -21,8 +38,7 @@ from MSS_SDP import *
 
 file_path = "graphs/small.mtx"
 # nodes, edges, max_stable_set = import_graph_from_mtx(file_path)
-# nodes, edges, max_stable_set = create_small_graph()
-nodes, edges, max_stable_set = create_large_graph()
+nodes, edges, max_stable_set = create_graph()
 n, m, C, b = define_vars(nodes, edges)
 
 def q(Y, p, beta, A):
@@ -34,7 +50,6 @@ def theta_tilde(Y, p, beta, A, A_adjoint, C, q):
     
     return max(-min_eigenvalue, 0)
 
-"""
 def compute_gradient(Y_flat, A, A_adjoint, C, p_t, q, beta, nodes):
     n = len(nodes)
     s = int(len(Y_flat) / n)
@@ -42,7 +57,6 @@ def compute_gradient(Y_flat, A, A_adjoint, C, p_t, q, beta, nodes):
     grad_YY = C + A_adjoint(q(Y, p_t, beta, A), n, nodes, edges)
     grad_Y = 2 * grad_YY.dot(Y)
     return grad_Y.flatten()
-"""
 
 # ----------------- HALLaR algorithm -----------------
 def hallar(
@@ -131,14 +145,14 @@ def hallar(
         #print(np.linalg.eigvalsh(Y_t.dot(Y_t.T)))
         
         # Optimize the objective function subject to the trace constraint
-        result = minimize(L_beta_scipy, Y_initial_flat, constraints = nlc) 
+        result = minimize(L_beta_scipy, Y_initial_flat, constraints = nlc)#,
                           #jac = compute_gradient, args=(A, A_adjoint, C, p_t, q, beta, nodes)) # , bounds=bounds
         
         # Retrieve the optimal solution
         optimal_solution_y_flat = result.x
         optimal_solution_y = optimal_solution_y_flat.reshape(Y_initial.shape) # create csr_matrix?
         
-        print("Trace of solution:", np.trace(optimal_solution_y.dot(optimal_solution_y.T)))
+        print("Trace of solution:", np.round(np.trace(optimal_solution_y.dot(optimal_solution_y.T)), 5))
 
         # Evaluate and check constraints for the optimal solution
         trace_constraint, eigenvalue_constraint = check_constraints(optimal_solution_y_flat, n)
@@ -159,7 +173,9 @@ def hallar(
 
         # Stopping condition ||A(UU.T)-b|| < epsilon_p
         if np.linalg.norm(A(Y_t.dot(Y_t.T), m, nodes, edges) - b) < epsilon_p: # ord='fro' ?
-            print("Stopping criterion met (||A(UU.T)-b|| < epsilon_p)")
+            print("Stopping criterion met (||A(UU.T)-b|| = {} < {} = epsilon_p)".format(
+                np.round(np.linalg.norm(A(Y_t.dot(Y_t.T), m, nodes, edges) - b), 5),
+                epsilon_p))
             break
 
         # Safety break
@@ -168,7 +184,8 @@ def hallar(
             break
         
         print("Iteration {}: ||A(UU.T)-b|| = {}, L(Y) = {}".format(t, \
-                np.linalg.norm(A(Y_t.dot(Y_t.T), m, nodes, edges) - b), L_beta_scipy(optimal_solution_y_flat)))
+            np.round(np.linalg.norm(A(Y_t.dot(Y_t.T), m, nodes, edges) - b), 5), 
+            np.round(L_beta_scipy(optimal_solution_y_flat), 5)))
 
         t = t + 1
 
@@ -181,12 +198,12 @@ def hallar(
 Y_t, p_t, theta_t, L_value = hallar(
         Y_0 = calculate_Y(initialize_X(n), 1), p_0 = np.zeros(m),
         epsilon_c = .05, epsilon_p = .05, 
-        beta = 100, 
+        beta = 150, 
         rho = 1, lambda_0 = 1,
         max_iter = 100
     )
 
 
 print("Maximum stable set (nx):", max_stable_set)
-print("Maximum stable set (HALLaR):", -L_value)
-print("Trace of YY^T:", np.trace(Y_t.dot(Y_t.T)))
+print("Maximum stable set (HALLaR):", np.round(-L_value, 5))
+print("Trace of YY^T:", np.round(np.trace(Y_t.dot(Y_t.T)), 5))
