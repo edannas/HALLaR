@@ -2,7 +2,6 @@
 min {C•UUT : A(UUT)=b, ||U||≤1, U ∈ R^{n×r}}
 
 eigenvalue check unnecessary
-trace(YYT) -> fr_norm(Y)**2
 
 TODO
 - clean HLR
@@ -11,6 +10,7 @@ TODO
 
 - transform Y solution to selection of edges? 
 - why and how is L approximating MSS?
+- selection of s?
 
 - remove gradient_descent?
 - Hur formulera trace constraint? Kvadrat istället för abs. Olikhet ist. för likhet?
@@ -30,6 +30,16 @@ TODO
 - 15-20 pages for report
 - refer functions to places in report
 - resolve global variables
+- compare ineq/eq-constraints (trace)
+- compare built in gradient with provided gradient
+- np.sum(np.square( -> np.norm(, ord = "fro")
+- In scipy optimize: which minimize alg. is used? print output
+
+
+FOR REPORT:
+- describe computation to avoid storing X in lagrangian (see image from meeting 23/5) C*X = (CY)*Y^T
+- comment reformulation of trace constraint as frobenius norm constraint? Do we need to square the frobenius norm again for it to be smooth?
+- trace(YYT) -> fr_norm(Y)**2
 """
 
 # ----------------- IMPORTS AND SETUP -----------------
@@ -44,10 +54,11 @@ from scipy.optimize import minimize, NonlinearConstraint
 #            import_graph_from_mtx, create_small_graph, create_large_graph, define_vars
 from MSS_SDP import *
 
-file_path = "graphs/small.mtx"
+file_path = "graphs/G1.mtx"
 # nodes, edges, max_stable_set = import_graph_from_mtx(file_path)
 nodes, edges, max_stable_set = create_graph()
 n, m, C, b = define_vars(nodes, edges)
+
 
 def q(Y, p, beta, A):
     return p + beta * (A(Y.dot(Y.T), m, nodes, edges) - b)
@@ -130,19 +141,11 @@ def hallar(
             s = int(len(Y_flat) / n)
             Y = Y_flat.reshape((n, s))
 
-            # Compute X = YY^T and create compressed sparse row matrices.
-            X = csr_matrix(Y.dot(Y.T)) 
-            " without constructing X "
-            C_sparse = csr_matrix(C) 
-            " move to global "
-            """
-            CX -> (CY)Y^T
-            storing A(X)
-            """
+            AX_b = A(Y.dot(Y.T), m, nodes, edges) - b
 
-            # Compute value of lagrangian function at X
-            return C_sparse.dot(X).trace() + np.dot(p_t.T, A(X, m, nodes, edges) - b) \
-                + beta/2 * np.linalg.norm(A(X, m, nodes, edges) - b) ** 2
+            # Compute value of lagrangian function at YY^T
+            return C.dot(Y).dot(Y.T).trace() + np.dot(p_t.T, AX_b) \
+                + beta/2 * np.linalg.norm(AX_b) ** 2
 
         # Define and flatten the initial guess for optimization (warm start)
         Y_initial = Y_t
@@ -152,24 +155,21 @@ def hallar(
         # bounds = [(-np.inf, np.inf)] * len(Y_initial_flat)
 
         # Trace constraint
-        """ sum of squared entries of Y """
-        con = lambda Y: np.trace(Y.reshape(n, int(len(Y)/n)).dot(Y.reshape(n, int(len(Y)/n)).T))**2 - 1
+        con = lambda Y: np.sum(np.square(Y)) - 1
         nlc = NonlinearConstraint(con, -np.inf, 0)
 
         """ CHECK BELOW """
         #print(np.linalg.eigvalsh(Y_t.dot(Y_t.T)))
         
-        """ which minimize alg.? print output """
         # Optimize the objective function subject to the trace constraint
-        result = minimize(L_beta_scipy, Y_initial_flat, constraints = nlc)#,
-                          #jac = compute_gradient, args=(A, A_adjoint, C, p_t, q, beta, nodes)) # , bounds=bounds
+        result = minimize(L_beta_scipy, Y_initial_flat, constraints = nlc) # ,
+                          # jac = compute_gradient, args=(A, A_adjoint, C, p_t, q, beta, nodes)) # , bounds=bounds
         
         # Retrieve the optimal solution
         optimal_solution_y_flat = result.x
-        optimal_solution_y = optimal_solution_y_flat.reshape(Y_initial.shape) # create csr_matrix?
+        optimal_solution_y = optimal_solution_y_flat.reshape(Y_initial.shape)
         
-        " reformulate trace exp"
-        print("Trace of solution:", np.round(np.trace(optimal_solution_y.dot(optimal_solution_y.T)), 5))
+        print("Trace of solution:", np.round(np.sum(np.square(optimal_solution_y)), 5))
 
         # Evaluate and check constraints for the optimal solution
         trace_constraint, eigenvalue_constraint = check_constraints(optimal_solution_y_flat, n)
@@ -184,17 +184,16 @@ def hallar(
         Y_t = optimal_solution_y
         # -----------------------------------------------------------------------
 
-        # Update Lagrangian multiplier (violation of constraints with penalty parameter beta)
-        """ CHECK """
-        " reuse A(X) "
+        AX_b = A(Y_t.dot(Y_t.T), m, nodes, edges) - b
+        AX_b_norm = np.linalg.norm(AX_b)
 
-        " compare ineq/eq-constraints (trace) "
-        p_t = p_t + beta * (A(Y_t.dot(Y_t.T), m, nodes, edges) - b)
+        # Update Lagrangian multiplier (violation of constraints with penalty parameter beta)
+        p_t = p_t + beta * AX_b
 
         # Stopping condition ||A(UU.T)-b|| < epsilon_p
-        if np.linalg.norm(A(Y_t.dot(Y_t.T), m, nodes, edges) - b) < epsilon_p: # ord='fro' ?
+        if AX_b_norm < epsilon_p: # ord='fro' ?
             print("Stopping criterion met (||A(UU.T)-b|| = {} < {} = epsilon_p)".format(
-                np.round(np.linalg.norm(A(Y_t.dot(Y_t.T), m, nodes, edges) - b), 5),
+                np.round(AX_b_norm, 5),
                 epsilon_p))
             break
 
@@ -204,7 +203,7 @@ def hallar(
             break
         
         print("Iteration {}: ||A(UU.T)-b|| = {}, L(Y) = {}".format(t, \
-            np.round(np.linalg.norm(A(Y_t.dot(Y_t.T), m, nodes, edges) - b), 5), 
+            np.round(AX_b_norm, 5), 
             np.round(L_beta_scipy(optimal_solution_y_flat), 5)))
 
         t = t + 1
@@ -218,7 +217,7 @@ def hallar(
 Y_t, p_t, theta_t, L_value = hallar(
         Y_0 = calculate_Y(initialize_X(n), 1), p_0 = np.zeros(m),
         epsilon_c = .05, epsilon_p = .05, 
-        beta = 50,
+        beta = 150,
         rho = 1, lambda_0 = 1,
         max_iter = 100
     )
@@ -226,4 +225,4 @@ Y_t, p_t, theta_t, L_value = hallar(
 
 print("Maximum stable set (nx):", max_stable_set)
 print("Maximum stable set (HALLaR):", np.round(-L_value, 5))
-print("Trace of YY^T:", np.round(np.trace(Y_t.dot(Y_t.T)), 5))
+print("Trace of YY^T:", np.round(np.sum(np.square(Y_t.dot(Y_t.T))), 5))

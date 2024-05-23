@@ -5,7 +5,6 @@ max {ee^T•X : X_ij=0, ij ∈ E, tr(X)=1, X ∈ S^n}
 
 import numpy as np
 import networkx as nx
-from scipy.sparse import csr_matrix
 from scipy.io import mmread
 
 def import_graph_from_mtx(file_path):
@@ -75,11 +74,8 @@ def check_constraints(Y_flat, n, epsilon=1e-6): # Check constraints with set mar
     s = int(len(Y_flat) / n)
     Y = Y_flat.reshape((n, s))
 
-    # Compute X = YY^T
-    X = csr_matrix(Y.dot(Y.T))
-
     # Trace constraint
-    trace_constraint = np.isclose(Y.dot(Y.T).trace(), 1, atol=epsilon)   
+    trace_constraint = np.isclose(np.sum(np.square(Y)), 1, atol=epsilon)   
 
     # Eigenvalue constraint
     eigenvalues = np.linalg.eigvalsh(Y.dot(Y.T))
