@@ -62,8 +62,6 @@ def compute_alpha_k(Y_k, y_k, g):
 
     return best_alpha
 
-import numpy as np
-
 # fix below function
 def numerical_gradient(X_star, phi_s, epsilon = 1e-6):
     n, m = X_star.shape

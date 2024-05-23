@@ -1,12 +1,18 @@
 """ 
 min {C•UUT : A(UUT)=b, ||U||≤1, U ∈ R^{n×r}}
 
+eigenvalue check unnecessary
+trace(YYT) -> fr_norm(Y)**2
+
 TODO
 - clean HLR
-- clean compute_gradient (move to utils?)
-- check A adjoint function
+- check A_adjoint function
 - check utils: initialize_X, calculate_Y
 
+- transform Y solution to selection of edges? 
+- why and how is L approximating MSS?
+
+- remove gradient_descent?
 - Hur formulera trace constraint? Kvadrat istället för abs. Olikhet ist. för likhet?
 - apply timing function to check total time but also to identify areas for optimization
 - plot convergence curve
@@ -22,6 +28,8 @@ TODO
 - We dont necesarrily need THE optimal solution because of relaxation, but if almost it would be good 
 - Compute gradient using adjoint instead of finite difference, but check correctness with FD
 - 15-20 pages for report
+- refer functions to places in report
+- resolve global variables
 """
 
 # ----------------- IMPORTS AND SETUP -----------------
@@ -123,8 +131,14 @@ def hallar(
             Y = Y_flat.reshape((n, s))
 
             # Compute X = YY^T and create compressed sparse row matrices.
-            X = csr_matrix(Y.dot(Y.T))
-            C_sparse = csr_matrix(C)
+            X = csr_matrix(Y.dot(Y.T)) 
+            " without constructing X "
+            C_sparse = csr_matrix(C) 
+            " move to global "
+            """
+            CX -> (CY)Y^T
+            storing A(X)
+            """
 
             # Compute value of lagrangian function at X
             return C_sparse.dot(X).trace() + np.dot(p_t.T, A(X, m, nodes, edges) - b) \
@@ -138,12 +152,14 @@ def hallar(
         # bounds = [(-np.inf, np.inf)] * len(Y_initial_flat)
 
         # Trace constraint
+        """ sum of squared entries of Y """
         con = lambda Y: np.trace(Y.reshape(n, int(len(Y)/n)).dot(Y.reshape(n, int(len(Y)/n)).T))**2 - 1
         nlc = NonlinearConstraint(con, -np.inf, 0)
 
         """ CHECK BELOW """
         #print(np.linalg.eigvalsh(Y_t.dot(Y_t.T)))
         
+        """ which minimize alg.? print output """
         # Optimize the objective function subject to the trace constraint
         result = minimize(L_beta_scipy, Y_initial_flat, constraints = nlc)#,
                           #jac = compute_gradient, args=(A, A_adjoint, C, p_t, q, beta, nodes)) # , bounds=bounds
@@ -152,6 +168,7 @@ def hallar(
         optimal_solution_y_flat = result.x
         optimal_solution_y = optimal_solution_y_flat.reshape(Y_initial.shape) # create csr_matrix?
         
+        " reformulate trace exp"
         print("Trace of solution:", np.round(np.trace(optimal_solution_y.dot(optimal_solution_y.T)), 5))
 
         # Evaluate and check constraints for the optimal solution
@@ -169,6 +186,9 @@ def hallar(
 
         # Update Lagrangian multiplier (violation of constraints with penalty parameter beta)
         """ CHECK """
+        " reuse A(X) "
+
+        " compare ineq/eq-constraints (trace) "
         p_t = p_t + beta * (A(Y_t.dot(Y_t.T), m, nodes, edges) - b)
 
         # Stopping condition ||A(UU.T)-b|| < epsilon_p
@@ -198,7 +218,7 @@ def hallar(
 Y_t, p_t, theta_t, L_value = hallar(
         Y_0 = calculate_Y(initialize_X(n), 1), p_0 = np.zeros(m),
         epsilon_c = .05, epsilon_p = .05, 
-        beta = 150, 
+        beta = 50,
         rho = 1, lambda_0 = 1,
         max_iter = 100
     )

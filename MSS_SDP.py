@@ -57,6 +57,8 @@ def define_vars(nodes, edges): # A function to define variables of MSS problem
 def A(X, m, nodes, edges):
     AX = np.empty(m)
     for k, (i, j) in enumerate(edges): 
+        " check edges from nx if (1,7) and (7,1) "
+        " factr 2 in A or adjoint? "
         # Assuming X is a sparse matrix representation of the adjacency matrix
         AX[k] = X[nodes.index(i), nodes.index(j)]
     return AX
