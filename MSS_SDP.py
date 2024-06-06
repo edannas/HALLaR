@@ -15,12 +15,39 @@ def import_graph_from_mtx(file_path):
     graph = nx.convert_matrix.from_scipy_sparse_array(adjacency_matrix)
     nodes = list(graph.nodes)
     edges = list(graph.edges)
-
+    print(len(nodes), len(edges))
     # Find a maximum stable set (independent set)
     max_stable_set = nx.maximal_independent_set(graph)
     
     return nodes, edges, len(max_stable_set)
 
+def read_clq_file(filename):
+    G = nx.Graph()
+    with open(filename, 'r') as file:
+        for line in file:
+            # Skip comment lines
+            if line.startswith('c'):
+                continue
+            # Read problem line to get number of vertices and edges
+            elif line.startswith('p'):
+                parts = line.split()
+                num_vertices = int(parts[2])
+                num_edges = int(parts[3])
+                G.add_nodes_from(range(1, num_vertices + 1))
+            # Read edge lines and add edges to the graph
+            elif line.startswith('e'):
+                parts = line.split()
+                u = int(parts[1])
+                v = int(parts[2])
+                G.add_edge(u, v)
+
+    nodes = list(G.nodes)
+    edges = list(G.edges)
+    max_stable_set = nx.maximal_independent_set(G)
+
+    return nodes, edges, len(max_stable_set)
+
+"""
 def create_graph(): # A function to create a small sample graph
     
     # Define nodes and edges
@@ -39,6 +66,23 @@ def create_graph(): # A function to create a small sample graph
     G = nx.Graph()
     G.add_nodes_from(nodes)
     G.add_edges_from(edges)
+    
+    # Find a maximum stable set (independent set)
+    max_stable_set = nx.maximal_independent_set(G)
+
+    return nodes, edges, len(max_stable_set)
+"""
+
+def create_random_graph(num_nodes, num_edges):
+    # Create a random graph
+    G = nx.gnm_random_graph(num_nodes, num_edges)
+    
+    # Ensure the nodes are numbered starting from 1 for consistency with your original example
+    G = nx.relabel_nodes(G, lambda x: x + 1)
+    
+    # Get the list of nodes and edges
+    nodes = list(G.nodes)
+    edges = list(G.edges)
     
     # Find a maximum stable set (independent set)
     max_stable_set = nx.maximal_independent_set(G)
@@ -66,19 +110,11 @@ def A_adjoint(v, n, nodes, edges):
     M = np.zeros((n, n))
     for k, (i, j) in enumerate(edges):
         M[nodes.index(i), nodes.index(j)] = v[k]
-        M[nodes.index(j), nodes.index(i)] = v[k]
+        # M[nodes.index(j), nodes.index(i)] = v[k]
     return M
 
-def check_constraints(Y_flat, n, epsilon=1e-6): # Check constraints with set margin epsilon
-    # Reshape Y_flat into correct dimensions (n*s)
-    s = int(len(Y_flat) / n)
-    Y = Y_flat.reshape((n, s))
-
+def check_constraints(Y_flat, n, epsilon=1e-2): # Check constraints with set margin epsilon
     # Trace constraint
-    trace_constraint = np.isclose(np.sum(np.square(Y)), 1, atol=epsilon)   
+    trace_constraint = np.isclose(np.sum(np.square(Y_flat)), 1, atol=epsilon)   
 
-    # Eigenvalue constraint
-    eigenvalues = np.linalg.eigvalsh(Y.dot(Y.T))
-    eigenvalue_constraint = all(eigval >= -epsilon for eigval in eigenvalues)
-
-    return trace_constraint, eigenvalue_constraint
+    return trace_constraint

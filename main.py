@@ -54,9 +54,15 @@ from scipy.optimize import minimize, NonlinearConstraint
 #            import_graph_from_mtx, create_small_graph, create_large_graph, define_vars
 from MSS_SDP import *
 
-file_path = "graphs/G1.mtx"
+# nodes, edges, max_stable_set = create_graph() # 20 nodes, 23 edges
+# nodes, edges, max_stable_set = create_random_graph(200, 400)
+
+#nodes, edges, max_stable_set = read_clq_file("graphs/C125.9.clq.txt")
+#print(len(nodes), len(edges))
+nodes, edges, max_stable_set = create_random_graph(250, 500)
+# file_path = "graphs/chesapeake.mtx" # 39 nodes, 170 edges
+# file_path = "graphs/G11.mtx" # 800 nodes, 1600 edges
 # nodes, edges, max_stable_set = import_graph_from_mtx(file_path)
-nodes, edges, max_stable_set = create_graph()
 n, m, C, b = define_vars(nodes, edges)
 
 
@@ -77,6 +83,22 @@ def compute_gradient(Y_flat, A, A_adjoint, C, p_t, q, beta, nodes):
     grad_Y = 2 * grad_YY.dot(Y)
     return grad_Y.flatten()
 
+"""
+def compute_gradient(Y_flat, A, A_adjoint, C, p_t, q, beta, nodes):
+    n = len(nodes)
+    s = int(len(Y_flat) / n)
+    Y = Y_flat.reshape((n, s))
+
+    # Compute the gradient of the Lagrangian
+    AX_b = A(Y.dot(Y.T), m, nodes, edges) - b
+    adjoint_term = A_adjoint(AX_b, n, nodes, edges)
+    grad_YY = C + adjoint_term + beta * A_adjoint(AX_b, n, nodes, edges)
+
+    # Compute the gradient with respect to Y
+    grad_Y = 2 * grad_YY.dot(Y)
+
+    return grad_Y.flatten()
+"""
 # ----------------- HALLaR algorithm -----------------
 def hallar(
     # initial points
@@ -156,14 +178,19 @@ def hallar(
 
         # Trace constraint
         con = lambda Y: np.sum(np.square(Y)) - 1
-        nlc = NonlinearConstraint(con, -np.inf, 0)
+        nlc = NonlinearConstraint(con, 0, 0)
 
         """ CHECK BELOW """
         #print(np.linalg.eigvalsh(Y_t.dot(Y_t.T)))
         
+        #print(1)
         # Optimize the objective function subject to the trace constraint
-        result = minimize(L_beta_scipy, Y_initial_flat, constraints = nlc) # ,
-                          # jac = compute_gradient, args=(A, A_adjoint, C, p_t, q, beta, nodes)) # , bounds=bounds
+        result = minimize(L_beta_scipy, Y_initial_flat, constraints = nlc, 
+                          args=(A, A_adjoint, C, p_t, q, beta, nodes),
+                          jac = compute_gradient,
+                          method = "trust-constr") # SLSQP, COBYLA
+                          #options={'disp': True}) # , bounds=bounds
+        #print(2)
         
         # Retrieve the optimal solution
         optimal_solution_y_flat = result.x
@@ -172,12 +199,12 @@ def hallar(
         print("Trace of solution:", np.round(np.sum(np.square(optimal_solution_y)), 5))
 
         # Evaluate and check constraints for the optimal solution
-        trace_constraint, eigenvalue_constraint = check_constraints(optimal_solution_y_flat, n)
+        trace_constraint = check_constraints(optimal_solution_y_flat, n)
         
-        if not (trace_constraint and eigenvalue_constraint):
-            print("Constraints are not satisfied (iteration {})".format(t))
+        if not trace_constraint:
+            print("Constraint not satisfied (iteration {})".format(t))
         else:
-            print("Constraints are satisfied.")
+            print("Constraint satisfied.")
             pass
         
         # Define next iterate
@@ -215,9 +242,10 @@ def hallar(
 
 
 Y_t, p_t, theta_t, L_value = hallar(
-        Y_0 = calculate_Y(initialize_X(n), 1), p_0 = np.zeros(m),
-        epsilon_c = .05, epsilon_p = .05, 
-        beta = 150,
+        # Y_0 = calculate_Y(initialize_X(n), 2), p_0 = np.zeros(m),
+        Y_0 = generate_Y(n, 1), p_0 = np.zeros(m),
+        epsilon_c = .05, epsilon_p = .01, 
+        beta = 500,
         rho = 1, lambda_0 = 1,
         max_iter = 100
     )
@@ -226,3 +254,14 @@ Y_t, p_t, theta_t, L_value = hallar(
 print("Maximum stable set (nx):", max_stable_set)
 print("Maximum stable set (HALLaR):", np.round(-L_value, 5))
 print("Trace of YY^T:", np.round(np.sum(np.square(Y_t.dot(Y_t.T))), 5))
+
+#n = 3
+#m = 2
+#nodes, edges, max_stable_set = create_random_graph(n, m)
+#v = np.array([1,2])
+#M = np.array([[1,2,3],[1,2,3],[1,2,3]])
+#IP1 = (A(M, m, nodes, edges)).dot(v)
+#IP2 = np.sum(M * (A_adjoint(v, n, nodes, edges)))
+#print(M, v)
+#print(IP1)
+#print(IP2)
