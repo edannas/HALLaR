@@ -59,27 +59,3 @@ To use the HALLaR algorithm, follow these steps:
 ## Contributing
 
 We welcome contributions to enhance the algorithm and its implementation. If you have suggestions or improvements, please feel free to create a pull request. For major changes, please open an issue first to discuss what you would like to change.
-
-## TODO
-- transform Y solution to selection of edges? 
-- why and how is L approximating MSS?
-- torch.optim.cuda? CuPy?
-- apply timing function to check total time but also to identify areas for optimization
-- check minimal eigenvalue computation theta_tilde, why?
-- selection of parameters?
-- Store all iterations and plot Y-vector and objective function (lagrangian)
-- LANCElOT method for selecting adaptive beta?
-- Check if approx optimal for the SDP, using duality gap? (also, compare to nx function (approximate))
-  Plot fluctuations in nx function to highlight not an exact number. Boxplot between this and HALLaR for a few runs.
-  (On a really small graph check with known MSS)
-- We dont necesarrily need THE optimal solution because of relaxation, but if almost it would be good 
-- Test gradient function against finite difference
-- resolve global variables
-- How formulate trace constraint? Quadratic instead of abs.? Compare ineq/eq constraint
-- compare built in gradient with provided gradient
-- np.sum(np.square( -> np.norm(, ord = "fro")))
-
-- describe computation to avoid storing X in lagrangian (see image from meeting 23/5) C*X = (CY)*Y^T
-- comment reformulation of trace constraint as frobenius norm constraint? Do we need to square the frobenius norm again for it to be smooth?
-- trace(YYT) -> fr_norm(Y)**2
-- Try other solvers
