@@ -21,58 +21,6 @@ def import_graph_from_mtx(file_path):
     
     return nodes, edges, len(max_stable_set)
 
-def read_clq_file(filename):
-    G = nx.Graph()
-    with open(filename, 'r') as file:
-        for line in file:
-            # Skip comment lines
-            if line.startswith('c'):
-                continue
-            # Read problem line to get number of vertices and edges
-            elif line.startswith('p'):
-                parts = line.split()
-                num_vertices = int(parts[2])
-                num_edges = int(parts[3])
-                G.add_nodes_from(range(1, num_vertices + 1))
-            # Read edge lines and add edges to the graph
-            elif line.startswith('e'):
-                parts = line.split()
-                u = int(parts[1])
-                v = int(parts[2])
-                G.add_edge(u, v)
-
-    nodes = list(G.nodes)
-    edges = list(G.edges)
-    max_stable_set = nx.maximal_independent_set(G)
-
-    return nodes, edges, len(max_stable_set)
-
-"""
-def create_graph(): # A function to create a small sample graph
-    
-    # Define nodes and edges
-    # nodes = list(range(1, 6))
-    # edges = [(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 1)]
-
-    nodes = list(range(1, 21))
-    edges = [
-        (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10),
-        (10, 11), (11, 12), (12, 13), (13, 14), (14, 15), (15, 16), (16, 17),
-        (17, 18), (18, 19), (19, 20), (20, 1),  # Ring structure
-        (2, 8), (5, 15), (10, 18)  # Additional edges for complexity
-    ]
-
-    # Create the graph
-    G = nx.Graph()
-    G.add_nodes_from(nodes)
-    G.add_edges_from(edges)
-    
-    # Find a maximum stable set (independent set)
-    max_stable_set = nx.maximal_independent_set(G)
-
-    return nodes, edges, len(max_stable_set)
-"""
-
 def create_random_graph(num_nodes, num_edges):
     # Create a random graph
     G = nx.gnm_random_graph(num_nodes, num_edges)
@@ -88,10 +36,6 @@ def create_random_graph(num_nodes, num_edges):
     max_stable_set = nx.maximal_independent_set(G)
 
     return nodes, edges, len(max_stable_set)
-
-def save_graph_to_mtx(G, filename):
-    adjacency_matrix = nx.adjacency_matrix(G)
-    mmwrite(filename, adjacency_matrix)
 
 def define_vars(nodes, edges): # A function to define variables of MSS problem
     n = len(nodes)
@@ -122,3 +66,17 @@ def check_constraints(Y_flat, n, epsilon=1e-2): # Check constraints with set mar
     trace_constraint = np.isclose(np.sum(np.square(Y_flat)), 1, atol=epsilon)   
 
     return trace_constraint
+
+"""
+Check A and A* functions. 
+""" 
+#n = 3
+#m = 2
+#nodes, edges, max_stable_set = create_random_graph(n, m)
+#v = np.array([1,2])
+#M = np.array([[1,2,3],[1,2,3],[1,2,3]])
+#IP1 = (A(M, m, nodes, edges)).dot(v)
+#IP2 = np.sum(M * (A_adjoint(v, n, nodes, edges)))
+#print(M, v)
+#print(IP1)
+#print(IP2)
