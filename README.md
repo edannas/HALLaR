@@ -60,10 +60,7 @@ To use the HALLaR algorithm, follow these steps:
 
 We welcome contributions to enhance the algorithm and its implementation. If you have suggestions or improvements, please feel free to create a pull request. For major changes, please open an issue first to discuss what you would like to change.
 
-
-
-
-TODO
+## TODO
 - transform Y solution to selection of edges? 
 - why and how is L approximating MSS?
 - torch.optim.cuda? CuPy?
