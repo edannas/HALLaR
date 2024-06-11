@@ -89,6 +89,10 @@ def create_random_graph(num_nodes, num_edges):
 
     return nodes, edges, len(max_stable_set)
 
+def save_graph_to_mtx(G, filename):
+    adjacency_matrix = nx.adjacency_matrix(G)
+    mmwrite(filename, adjacency_matrix)
+
 def define_vars(nodes, edges): # A function to define variables of MSS problem
     n = len(nodes)
     m = len(edges)

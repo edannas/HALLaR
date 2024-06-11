@@ -46,6 +46,7 @@ FOR REPORT:
 import numpy as np
 from utils import *
 from scipy.optimize import minimize, NonlinearConstraint
+import time
 # from HLR import hlr
 # import cvxpy as cp
 
@@ -59,12 +60,32 @@ from MSS_SDP import *
 
 #nodes, edges, max_stable_set = read_clq_file("graphs/C125.9.clq.txt")
 #print(len(nodes), len(edges))
-nodes, edges, max_stable_set = create_random_graph(250, 500)
-# file_path = "graphs/chesapeake.mtx" # 39 nodes, 170 edges
+# nodes, edges, max_stable_set = create_random_graph(250, 500)
+graph = "small2"
+file_path = "graphs/{}.pickle".format(graph)
 # file_path = "graphs/G11.mtx" # 800 nodes, 1600 edges
+
+import pickle
+
+# load graph object from file
+G = pickle.load(open(file_path, 'rb'))
+nodes = list(G.nodes)
+edges = list(G.edges)
+
+# Find a maximum stable set (independent set)
+max_stable_sets = []
+
+k = 0
+while k < 10:
+    max_stable_sets.append(len(nx.maximal_independent_set(G)))
+    k += 1 
+
+max_stable_set = sum(max_stable_sets)/len(max_stable_sets)
+
+print("avg:", max_stable_set, "max:", max(max_stable_sets), "min:", min(max_stable_sets))
+exit()
 # nodes, edges, max_stable_set = import_graph_from_mtx(file_path)
 n, m, C, b = define_vars(nodes, edges)
-
 
 def q(Y, p, beta, A):
     return p + beta * (A(Y.dot(Y.T), m, nodes, edges) - b)
@@ -122,6 +143,11 @@ def hallar(
     """
     epsilon = min(epsilon_c, epsilon_p**2 * beta / 6)
     """
+    
+    # Store iterates for convergence analysis
+    iterations = []  # Example iteration numbers
+    objective_values = []  # Example objective function values
+    constraint_violations = []
 
     # Solve Y_t (minimize Lagrangian) iteratively until stopping criterion is met
     # YY^T is automatically symmetric PSD. 
@@ -216,6 +242,12 @@ def hallar(
 
         # Update Lagrangian multiplier (violation of constraints with penalty parameter beta)
         p_t = p_t + beta * AX_b
+        
+        opt_value = L_beta_scipy(optimal_solution_y_flat)
+
+        iterations.append(t)
+        objective_values.append(-opt_value)
+        constraint_violations.append(AX_b_norm)
 
         # Stopping condition ||A(UU.T)-b|| < epsilon_p
         if AX_b_norm < epsilon_p: # ord='fro' ?
@@ -228,32 +260,38 @@ def hallar(
         if t > max_iter:
             print("Maximum iterations reached ({})".format(max_iter))
             break
-        
+
         print("Iteration {}: ||A(UU.T)-b|| = {}, L(Y) = {}".format(t, \
             np.round(AX_b_norm, 5), 
-            np.round(L_beta_scipy(optimal_solution_y_flat), 5)))
+            np.round(opt_value, 5)))
 
         t = t + 1
 
     # Minimal eigenvalue computation
     theta_t = theta_tilde(Y_t.dot(Y_t.T), p_t, beta, A, A_adjoint, C, q)
 
-    return Y_t, p_t, theta_t, L_beta_scipy(optimal_solution_y_flat)
+    return Y_t, p_t, theta_t, L_beta_scipy(optimal_solution_y_flat), iterations, objective_values, constraint_violations
 
+beta = 500
+rank = 1
 
-Y_t, p_t, theta_t, L_value = hallar(
+start_time = time.time()
+Y_t, p_t, theta_t, L_value, iterations, objective_values, constraint_violations = hallar(
         # Y_0 = calculate_Y(initialize_X(n), 2), p_0 = np.zeros(m),
-        Y_0 = generate_Y(n, 1), p_0 = np.zeros(m),
-        epsilon_c = .05, epsilon_p = .01, 
-        beta = 500,
+        Y_0 = generate_Y(n, rank), p_0 = np.zeros(m),
+        epsilon_c = .05, epsilon_p = 1e-2, 
+        beta = beta,
         rho = 1, lambda_0 = 1,
-        max_iter = 100
+        max_iter = 1000
     )
-
+end_time = time.time()
+comp_time = end_time - start_time
 
 print("Maximum stable set (nx):", max_stable_set)
 print("Maximum stable set (HALLaR):", np.round(-L_value, 5))
 print("Trace of YY^T:", np.round(np.sum(np.square(Y_t.dot(Y_t.T))), 5))
+
+print("Value:", -L_value, "AX-b:", constraint_violations[-1], "No. It:", iterations[-1], "comp_time:", comp_time, "Nx-value:", max_stable_set)
 
 #n = 3
 #m = 2
@@ -265,3 +303,50 @@ print("Trace of YY^T:", np.round(np.sum(np.square(Y_t.dot(Y_t.T))), 5))
 #print(M, v)
 #print(IP1)
 #print(IP2)
+
+import matplotlib.pyplot as plt
+
+def plot_metrics(iterations, objective_values, constraint_violations, reference_value):
+    fig, ax1 = plt.subplots()
+
+    # Plot the objective function values
+    ax1.set_xlabel('Iteration')
+    ax1.set_ylabel('Objective Function Value', color='tab:blue')
+    ax1.plot(iterations, objective_values, '-', color='tab:blue', label='Objective Function Value')
+    ax1.tick_params(axis='y', labelcolor='tab:blue')
+
+    # Add a horizontal reference line for the objective function value
+    ax1.axhline(y=reference_value, color='tab:blue', linestyle='--', label='Reference Value (NetworkX)')
+
+    # Create a second y-axis to plot the constraint violations
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('Constraint Violation', color='tab:red')
+    ax2.plot(iterations, constraint_violations, '-', color='tab:red', label='Constraint Violation')
+    ax2.tick_params(axis='y', labelcolor='tab:red')
+
+    # Add legends
+    #fig.tight_layout()  # Adjust layout to make room for both y-labels
+    #ax1.legend(loc='upper right')
+    #ax2.legend(loc='upper right')
+
+    # Combine legends from both axes
+    lines, labels = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    lines += lines2
+    labels += labels2
+
+    # Add the combined legend to the plot
+    fig.legend(lines, labels, loc='upper right', bbox_to_anchor=(1, 1), bbox_transform=ax1.transAxes)
+
+
+    # plt.title(u'Lagrangian Value and Constraint Violation per Iteration ($β = {}$, r = {})'.format(beta, rank))
+    plt.savefig("plots/{}_beta{}_rank{}_I{}.jpg".format(graph, beta, rank, iterations[-1]), dpi = 300)
+    plt.show()
+
+# Example usage
+#iterations = list(range(1, 11))  # Example iteration numbers
+#objective_values = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]  # Example objective function values
+#constraint_violations = [1, 0.8, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0]  # Example constraint violations
+reference_value = max_stable_set  # Example reference value for the objective function
+
+plot_metrics(iterations, objective_values, constraint_violations, reference_value)
