@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Hybrid Augmented Lagrangian Low-Rank (HALLaR) algorithm is designed to solve large-scale semidefinite programming (SDP) problems efficiently. This repository contains the implementation of the HALLaR algorithm in Python, along with supporting scripts and sample problems to demonstrate its functionality.
+The Hybrid Augmented Lagrangian Low-Rank (HALLaR) algorithm [1] by Monteiro, R. D., Sujanani, A. and Cifuentes, D. (2024) is designed to solve large-scale semidefinite programming (SDP) problems efficiently. This repository contains the implementation of the HALLaR algorithm in Python, along with supporting scripts and sample problems to demonstrate its functionality.
 
 ## Algorithm Description
 
@@ -59,3 +59,6 @@ To use the HALLaR algorithm, follow these steps:
 ## Contributing
 
 We welcome contributions to enhance the algorithm and its implementation. If you have suggestions or improvements, please feel free to create a pull request. For major changes, please open an issue first to discuss what you would like to change.
+
+## References
+Monteiro, R. D., Sujanani, A., & Cifuentes, D. (2024). A low-rank augmented Lagrangian method for large-scale semidefinite programming based on a hybrid convex-nonconvex approach. _arXiv preprint arXiv:2401.12490._
